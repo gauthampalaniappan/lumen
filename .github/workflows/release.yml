@@ -225,7 +225,27 @@ jobs:
           done
           taskkill //F //IM Lumen.exe >/dev/null 2>&1 || true
           cat "$log" 2>/dev/null || echo "(no log written)"
-          [ "$ok" = 1 ]
+          if [ "$ok" != 1 ]; then
+            # Put the log in an annotation so it is readable from the run summary.
+            body="$( (tail -n 60 "$log" 2>/dev/null || echo "no log written at $log") | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
+            echo "::error title=Lumen.exe did not finish --self-check::$body"
+            exit 1
+          fi
+
+      - name: Diagnose (run from source)
+        if: failure()
+        shell: msys2 {0}
+        run: |
+          scratch="$(cygpath -u "$RUNNER_TEMP")/lumen-src"
+          mkdir -p "$scratch"
+          export XDG_CONFIG_HOME="$(cygpath -w "$scratch/config")"
+          export XDG_DATA_HOME="$(cygpath -w "$scratch/data")"
+          export XDG_CACHE_HOME="$(cygpath -w "$scratch/cache")"
+          export GSK_RENDERER=cairo PYTHONUNBUFFERED=1 PYTHONFAULTHANDLER=1
+          timeout 90 python lumen.py --library "$(cygpath -w "$PWD/sample-photos")" --self-check > "$scratch/out.txt" 2>&1 || true
+          ls dist/Lumen/_internal | head -40 > "$scratch/bundle.txt" 2>&1 || true
+          body="$( (tail -n 50 "$scratch/out.txt"; echo '--- bundle ---'; cat "$scratch/bundle.txt") | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
+          echo "::warning title=Lumen from source on Windows::$body"
 
       - name: Make installer and portable zip
         shell: pwsh
