@@ -1,0 +1,63 @@
+# RPM recipe for Fedora. @VERSION@ and @DATE@ are filled in by
+# packaging/linux/build-packages.sh from lumen/__init__.py.
+%{!?_metainfodir: %global _metainfodir %{_datadir}/metainfo}
+
+Name:           lumen
+Version:        @VERSION@
+Release:        1%{?dist}
+Summary:        Browse, rate, tag and lightly edit local photo folders
+License:        MIT
+URL:            https://github.com/gauthampalaniappan/lumen
+Source0:        %{name}-%{version}.tar.gz
+BuildArch:      noarch
+
+BuildRequires:  python3
+BuildRequires:  desktop-file-utils
+
+Requires:       python3
+Requires:       python3-gobject
+Requires:       gtk4
+Requires:       libadwaita >= 1.7
+Requires:       python3-pillow
+Recommends:     udisks2
+Suggests:       gphoto2
+
+%description
+Lumen is a small photo organizer for Linux. Point it at folders you already
+have, browse a thumbnail grid, rate, tag and album your pictures, make light
+non-destructive edits, and build simple photobooks without ever rewriting your
+originals.
+
+%prep
+%autosetup -n %{name}-%{version}
+
+%build
+# Pure Python; nothing to build.
+
+%install
+install -d %{buildroot}%{_datadir}/lumen
+cp -a lumen %{buildroot}%{_datadir}/lumen/lumen
+find %{buildroot}%{_datadir}/lumen -name '__pycache__' -prune -exec rm -rf {} +
+install -Dm0755 packaging/linux/lumen.sh %{buildroot}%{_bindir}/lumen
+install -Dm0644 share/org.lumen.Lumen.desktop %{buildroot}%{_datadir}/applications/org.lumen.Lumen.desktop
+install -Dm0644 share/org.lumen.Lumen.svg %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/org.lumen.Lumen.svg
+install -Dm0644 share/org.lumen.Lumen.metainfo.xml %{buildroot}%{_metainfodir}/org.lumen.Lumen.metainfo.xml
+%if 0%{?fedora} || 0%{?rhel}
+%py_byte_compile %{python3} %{buildroot}%{_datadir}/lumen
+%endif
+
+%check
+desktop-file-validate %{buildroot}%{_datadir}/applications/org.lumen.Lumen.desktop
+
+%files
+%license LICENSE
+%doc README.md
+%{_bindir}/lumen
+%{_datadir}/lumen/
+%{_datadir}/applications/org.lumen.Lumen.desktop
+%{_datadir}/icons/hicolor/scalable/apps/org.lumen.Lumen.svg
+%{_metainfodir}/org.lumen.Lumen.metainfo.xml
+
+%changelog
+* @DATE@ Gautham Palaniappan - @VERSION@-1
+- Release @VERSION@

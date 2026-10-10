@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Lumen">
+  <rect width="64" height="64" rx="14" fill="#1f3a5f"/>
+  <rect x="12" y="14" width="40" height="32" rx="4" fill="#f7f4ef"/>
+  <circle cx="24" cy="26" r="5" fill="#f0b429"/>
+  <path d="M14 42 L26 30 L36 38 L44 32 L50 42 Z" fill="#3d7ea6"/>
+  <path d="M32 42 L44 32 L50 42 Z" fill="#2f6a4a"/>
+</svg>

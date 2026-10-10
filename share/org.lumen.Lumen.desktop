@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Lumen
+GenericName=Photo Organizer
+Comment=Browse, rate, tag, and lightly edit local photo folders
+Exec=lumen
+Icon=org.lumen.Lumen
+Terminal=false
+Categories=Graphics;Photography;
+Keywords=photo;picture;album;image;library;
+StartupNotify=true

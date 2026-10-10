@@ -1,0 +1,326 @@
+# Builds Lumen for Linux, Windows and macOS.
+#
+# - Push a tag like v0.1.0 -> every package is built, launch-tested, and
+#   attached to a *draft* GitHub Release. Review it, then press Publish.
+# - Run it by hand (Actions tab -> Release -> Run workflow) to test the builds
+#   without making a release; the packages appear as downloadable artifacts.
+#
+# The tag must match __version__ in lumen/__init__.py, and
+# share/org.lumen.Lumen.metainfo.xml needs a <release> line for that version.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Version and checks
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read version
+        id: v
+        run: |
+          version="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' lumen/__init__.py)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF_TYPE" == "tag" && "${GITHUB_REF_NAME#v}" != "$version" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match __version__ $version in lumen/__init__.py"
+            exit 1
+          fi
+          if ! grep -q "<release version=\"$version\"" share/org.lumen.Lumen.metainfo.xml; then
+            echo "::error::Add <release version=\"$version\" date=\"YYYY-MM-DD\"/> to share/org.lumen.Lumen.metainfo.xml"
+            exit 1
+          fi
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Headless checks
+        run: |
+          pip install pillow
+          python -m py_compile lumen.py lumen/*.py scripts/*.py
+          # Lumen ignores import sources under /home and /tmp, and the runner's
+          # checkout is under /home, so the import check needs another folder.
+          sudo mkdir -p /srv/lumen-check
+          sudo chown "$(id -u)" /srv/lumen-check
+          export LUMEN_CHECK_TMP=/srv/lumen-check
+          python scripts/check_library.py
+          python scripts/check_import.py
+          python scripts/check_backup.py
+
+  fedora:
+    name: Linux (Fedora .rpm)
+    needs: version
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - name: Install build tools and runtime
+        run: |
+          dnf -y install rpm-build desktop-file-utils python3 python3-devel tar \
+            python3-gobject gtk4 libadwaita python3-pillow \
+            xorg-x11-server-Xvfb mesa-dri-drivers dejavu-sans-fonts
+
+      - uses: actions/checkout@v7
+
+      - name: Build RPM
+        env:
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: packaging/linux/build-packages.sh rpm
+
+      - name: Install the RPM and launch it
+        run: |
+          dnf -y install ./release/*.rpm
+          rpm -qi lumen
+          Xvfb :99 -screen 0 1280x800x24 >/dev/null 2>&1 &
+          export DISPLAY=:99 GDK_BACKEND=x11 GSK_RENDERER=cairo PYTHONUNBUFFERED=1
+          scratch="$(mktemp -d /var/tmp/lumen-smoke.XXXX)"
+          export XDG_CONFIG_HOME="$scratch/config" XDG_DATA_HOME="$scratch/data" XDG_CACHE_HOME="$scratch/cache"
+          timeout 90 lumen --library "$PWD/sample-photos" --self-check > "$scratch/out.txt" 2>&1 || true
+          cat "$scratch/out.txt"
+          grep -q "SELF_CHECK id=" "$scratch/out.txt"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: lumen-fedora
+          path: release/*.rpm
+          if-no-files-found: error
+
+  debian:
+    name: Linux (Debian/Ubuntu .deb)
+    needs: version
+    runs-on: ubuntu-latest
+    # Debian 13 ships libadwaita 1.7, the oldest version Lumen supports.
+    container: debian:13
+    steps:
+      - name: Install build tools
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            dpkg-dev ca-certificates xvfb
+
+      - uses: actions/checkout@v7
+
+      - name: Build .deb
+        env:
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: packaging/linux/build-packages.sh deb
+
+      - name: Install the .deb and launch it
+        run: |
+          DEBIAN_FRONTEND=noninteractive apt-get install -y ./release/*.deb
+          dpkg -s lumen | head -3
+          Xvfb :99 -screen 0 1280x800x24 >/dev/null 2>&1 &
+          export DISPLAY=:99 GDK_BACKEND=x11 GSK_RENDERER=cairo PYTHONUNBUFFERED=1
+          scratch="$(mktemp -d /var/tmp/lumen-smoke.XXXX)"
+          export XDG_CONFIG_HOME="$scratch/config" XDG_DATA_HOME="$scratch/data" XDG_CACHE_HOME="$scratch/cache"
+          timeout 90 lumen --library "$PWD/sample-photos" --self-check > "$scratch/out.txt" 2>&1 || true
+          cat "$scratch/out.txt"
+          grep -q "SELF_CHECK id=" "$scratch/out.txt"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: lumen-debian
+          path: release/*.deb
+          if-no-files-found: error
+
+  windows:
+    name: Windows (installer + portable zip)
+    needs: version
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-python-gobject
+            mingw-w64-ucrt-x86_64-python-cairo
+            mingw-w64-ucrt-x86_64-python-pillow
+            mingw-w64-ucrt-x86_64-gtk4
+            mingw-w64-ucrt-x86_64-libadwaita
+            mingw-w64-ucrt-x86_64-librsvg
+            mingw-w64-ucrt-x86_64-adwaita-icon-theme
+            mingw-w64-ucrt-x86_64-pyinstaller
+
+      - name: Build with PyInstaller
+        shell: msys2 {0}
+        run: |
+          python -c "import gi; gi.require_version('Adw', '1'); from gi.repository import Adw; print('libadwaita', Adw.get_major_version(), Adw.get_minor_version())"
+          pyinstaller --noconfirm --clean packaging/lumen.spec
+
+      - name: Launch the bundled app
+        shell: msys2 {0}
+        run: |
+          scratch="$(cygpath -u "$RUNNER_TEMP")/lumen-smoke"
+          mkdir -p "$scratch"
+          export XDG_CONFIG_HOME="$(cygpath -w "$scratch/config")"
+          export XDG_DATA_HOME="$(cygpath -w "$scratch/data")"
+          export XDG_CACHE_HOME="$(cygpath -w "$scratch/cache")"
+          export GSK_RENDERER=cairo
+          # Windowed builds write stdout/stderr to lumen.log in the cache folder.
+          log="$scratch/cache/lumen/lumen.log"
+          ./dist/Lumen/Lumen.exe --library "$(cygpath -w "$PWD/sample-photos")" --self-check &
+          ok=0
+          for _ in $(seq 120); do
+            if grep -q "SELF_CHECK id=" "$log" 2>/dev/null; then ok=1; break; fi
+            sleep 1
+          done
+          taskkill //F //IM Lumen.exe >/dev/null 2>&1 || true
+          cat "$log" 2>/dev/null || echo "(no log written)"
+          [ "$ok" = 1 ]
+
+      - name: Make installer and portable zip
+        shell: pwsh
+        run: |
+          if (-not (Get-ChildItem "C:\Program Files*\Inno Setup*\ISCC.exe" -ErrorAction SilentlyContinue)) {
+            choco install innosetup -y --no-progress
+          }
+          $iscc = (Get-ChildItem "C:\Program Files*\Inno Setup*\ISCC.exe" | Select-Object -First 1).FullName
+          & $iscc "/DAppVersion=$env:VERSION" packaging\windows\lumen.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Compress-Archive -Path dist\Lumen -DestinationPath "release\Lumen-$env:VERSION-windows-x64-portable.zip"
+          Get-ChildItem release
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: lumen-windows
+          path: release/*
+          if-no-files-found: error
+
+  macos:
+    name: macOS (${{ matrix.arch }} .dmg)
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install GTK 4 and libadwaita
+        run: |
+          brew update
+          brew install gtk4 libadwaita pygobject3 librsvg adwaita-icon-theme
+
+      - name: Build with PyInstaller
+        run: |
+          # Use the Homebrew Python that pygobject3 was built for.
+          py=""
+          for candidate in "$(brew --prefix)/bin/python3" "$(brew --prefix)"/opt/python@3.*/bin/python3.*; do
+            [[ "$candidate" == *-config ]] && continue
+            if [ -x "$candidate" ] && "$candidate" -c "import gi, cairo" 2>/dev/null; then py="$candidate"; break; fi
+          done
+          if [ -z "$py" ]; then echo "::error::No Homebrew Python can import gi"; exit 1; fi
+          echo "Using $py ($("$py" --version))"
+          "$py" -m venv --system-site-packages .venv
+          .venv/bin/pip install --quiet pyinstaller pillow
+          .venv/bin/python -c "import gi; gi.require_version('Adw', '1'); from gi.repository import Adw; print('libadwaita', Adw.get_major_version(), Adw.get_minor_version())"
+          .venv/bin/pyinstaller --noconfirm --clean packaging/lumen.spec
+          # Ad-hoc signature so Apple Silicon will run it (not a Developer ID signature).
+          codesign --force --deep --sign - dist/Lumen.app
+
+      - name: Launch the bundled app
+        run: |
+          scratch="$RUNNER_TEMP/lumen-smoke"
+          mkdir -p "$scratch"
+          export XDG_CONFIG_HOME="$scratch/config" XDG_DATA_HOME="$scratch/data" XDG_CACHE_HOME="$scratch/cache"
+          export GSK_RENDERER=cairo PYTHONUNBUFFERED=1
+          ./dist/Lumen.app/Contents/MacOS/Lumen --library "$PWD/sample-photos" --self-check > "$scratch/out.txt" 2>&1 &
+          pid=$!
+          ok=0
+          for _ in $(seq 120); do
+            if grep -q "SELF_CHECK id=" "$scratch/out.txt"; then ok=1; break; fi
+            sleep 1
+          done
+          kill "$pid" 2>/dev/null || true
+          cat "$scratch/out.txt"
+          [ "$ok" = 1 ]
+
+      - name: Make .dmg
+        run: |
+          mkdir -p release dmg
+          cp -R dist/Lumen.app dmg/
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname "Lumen $VERSION" -srcfolder dmg -ov -format UDZO \
+            "release/Lumen-$VERSION-macos-${{ matrix.arch }}.dmg"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: lumen-macos-${{ matrix.arch }}
+          path: release/*.dmg
+          if-no-files-found: error
+
+  release:
+    name: Draft GitHub Release
+    if: github.ref_type == 'tag'
+    needs: [version, fedora, debian, windows, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: release
+        run: |
+          sha256sum -- * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          cat > notes.md <<EOF
+          ## Install
+
+          | System | Download |
+          | --- | --- |
+          | Windows 10/11 (64-bit) | \`Lumen-$VERSION-windows-x64-setup.exe\` (or the portable \`.zip\`) |
+          | macOS, Apple Silicon | \`Lumen-$VERSION-macos-arm64.dmg\` |
+          | macOS, Intel | \`Lumen-$VERSION-macos-x86_64.dmg\` |
+          | Fedora | \`lumen-$VERSION-1.*.noarch.rpm\` — \`sudo dnf install ./lumen-*.rpm\` |
+          | Debian 13 / Ubuntu 25.04+ | \`lumen_$VERSION-1_all.deb\` — \`sudo apt install ./lumen_*.deb\` |
+
+          The Windows and macOS builds are not code-signed yet. Windows may show
+          "Windows protected your PC": choose **More info → Run anyway**. On macOS,
+          open the app once, then go to **System Settings → Privacy & Security** and
+          choose **Open Anyway**.
+
+          On Windows and macOS, importing straight from a camera is not available
+          (it needs gphoto2); import from a memory card works by choosing its folder.
+          EOF
+          gh release create "$GITHUB_REF_NAME" release/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft \
+            --title "Lumen $VERSION" \
+            --notes-file notes.md \
+            --generate-notes

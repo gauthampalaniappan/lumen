@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Shown by GNOME Software / KDE Discover when the RPM or .deb is opened. -->
+<component type="desktop-application">
+  <id>org.lumen.Lumen</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Lumen</name>
+  <summary>Browse, rate, tag and lightly edit local photo folders</summary>
+  <developer id="io.github.gauthampalaniappan">
+    <name>Gautham Palaniappan</name>
+  </developer>
+  <description>
+    <p>
+      Lumen is a small photo organizer. Point it at folders you already have,
+      browse a thumbnail grid, rate, tag and album your pictures, make light
+      non-destructive edits, and build simple photobooks without ever rewriting
+      your originals.
+    </p>
+    <ul>
+      <li>Albums, 0–5 star ratings and tags, with search</li>
+      <li>Live edit sliders with an RGB histogram; edits never touch the original</li>
+      <li>Photobook export to PDF, and printing</li>
+      <li>Import from memory cards and cameras, and incremental backups</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">org.lumen.Lumen.desktop</launchable>
+  <url type="homepage">https://github.com/gauthampalaniappan/lumen</url>
+  <url type="bugtracker">https://github.com/gauthampalaniappan/lumen/issues</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Library view</caption>
+      <image>https://raw.githubusercontent.com/gauthampalaniappan/lumen/main/docs/screenshots/library-layout.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Edit panel</caption>
+      <image>https://raw.githubusercontent.com/gauthampalaniappan/lumen/main/docs/screenshots/edit-panel.png</image>
+    </screenshot>
+  </screenshots>
+  <content_rating type="oars-1.1"/>
+  <provides>
+    <binary>lumen</binary>
+  </provides>
+  <releases>
+    <release version="0.1.0" date="2026-10-10"/>
+  </releases>
+</component>
