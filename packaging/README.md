@@ -7,7 +7,7 @@ Releases are built by GitHub Actions (`.github/workflows/release.yml`).
 | `lumen-<ver>-1.fcNN.noarch.rpm` | Fedora container | `packaging/linux/build-packages.sh rpm` |
 | `lumen_<ver>-1_all.deb` | Debian 13 container | `packaging/linux/build-packages.sh deb` |
 | `Lumen-<ver>-windows-x64-setup.exe` and `-portable.zip` | Windows, MSYS2 UCRT64 | PyInstaller (`packaging/lumen.spec`), then Inno Setup (`packaging/windows/lumen.iss`) |
-| `Lumen-<ver>-macos-arm64.dmg` / `-x86_64.dmg` | macOS (Apple Silicon and Intel) | Homebrew GTK, PyInstaller (`packaging/lumen.spec`), `hdiutil` |
+| `Lumen-<ver>-macos-arm64.dmg` | macOS, Apple Silicon (Homebrew has no prebuilt GTK for Intel Macs) | Homebrew GTK, PyInstaller (`packaging/lumen.spec`), `hdiutil` |
 
 Every package is installed or launched with `--self-check` in CI before it is
 uploaded, so a build that cannot start never reaches a release.

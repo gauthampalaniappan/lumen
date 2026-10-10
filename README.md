@@ -34,8 +34,7 @@ Get the latest installer from the [Releases page](https://github.com/gauthampala
 | System | File | Install |
 | --- | --- | --- |
 | Windows 10/11 (64-bit) | `Lumen-<version>-windows-x64-setup.exe` | Run it. No admin rights needed. A portable `.zip` is also provided. |
-| macOS, Apple Silicon | `Lumen-<version>-macos-arm64.dmg` | Open it and drag Lumen to Applications. |
-| macOS, Intel | `Lumen-<version>-macos-x86_64.dmg` | Same as above. |
+| macOS, Apple Silicon (M1 or newer) | `Lumen-<version>-macos-arm64.dmg` | Open it and drag Lumen to Applications. |
 | Fedora | `lumen-<version>-1.<fc>.noarch.rpm` | `sudo dnf install ./lumen-*.rpm` |
 | Debian 13, Ubuntu 25.04 or newer | `lumen_<version>-1_all.deb` | `sudo apt install ./lumen_*.deb` |
 

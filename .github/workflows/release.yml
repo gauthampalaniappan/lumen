@@ -272,11 +272,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Apple Silicon only: Homebrew no longer ships prebuilt GTK for Intel
+        # Macs, so an Intel build would compile GTK from source on every run.
         include:
           - runner: macos-15
             arch: arm64
-          - runner: macos-15-intel
-            arch: x86_64
     runs-on: ${{ matrix.runner }}
     env:
       VERSION: ${{ needs.version.outputs.version }}
@@ -371,8 +371,7 @@ jobs:
           | System | Download |
           | --- | --- |
           | Windows 10/11 (64-bit) | \`Lumen-$VERSION-windows-x64-setup.exe\` (or the portable \`.zip\`) |
-          | macOS, Apple Silicon | \`Lumen-$VERSION-macos-arm64.dmg\` |
-          | macOS, Intel | \`Lumen-$VERSION-macos-x86_64.dmg\` |
+          | macOS, Apple Silicon (M1 or newer) | \`Lumen-$VERSION-macos-arm64.dmg\` |
           | Fedora | \`lumen-$VERSION-1.*.noarch.rpm\` — \`sudo dnf install ./lumen-*.rpm\` |
           | Debian 13 / Ubuntu 25.04+ | \`lumen_$VERSION-1_all.deb\` — \`sudo apt install ./lumen_*.deb\` |
 
