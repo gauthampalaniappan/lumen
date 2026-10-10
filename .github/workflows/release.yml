@@ -215,19 +215,22 @@ jobs:
           export XDG_DATA_HOME="$(cygpath -w "$scratch/data")"
           export XDG_CACHE_HOME="$(cygpath -w "$scratch/cache")"
           export GSK_RENDERER=cairo
-          # Windowed builds write stdout/stderr to lumen.log in the cache folder.
+          # Started from a shell, the app inherits this pipe as stdout; started by
+          # double-click it has none and writes lumen.log in the cache folder.
+          # Watch both.
           log="$scratch/cache/lumen/lumen.log"
-          ./dist/Lumen/Lumen.exe --library "$(cygpath -w "$PWD/sample-photos")" --self-check &
+          out="$scratch/out.txt"
+          ./dist/Lumen/Lumen.exe --library "$(cygpath -w "$PWD/sample-photos")" --self-check > "$out" 2>&1 &
           ok=0
           for _ in $(seq 120); do
-            if grep -q "SELF_CHECK id=" "$log" 2>/dev/null; then ok=1; break; fi
+            if grep -qs "SELF_CHECK id=" "$out" "$log"; then ok=1; break; fi
             sleep 1
           done
           taskkill //F //IM Lumen.exe >/dev/null 2>&1 || true
-          cat "$log" 2>/dev/null || echo "(no log written)"
+          cat "$out" "$log" 2>/dev/null || true
           if [ "$ok" != 1 ]; then
-            # Put the log in an annotation so it is readable from the run summary.
-            body="$( (tail -n 60 "$log" 2>/dev/null || echo "no log written at $log") | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
+            # Put the output in an annotation so it is readable from the run summary.
+            body="$( (tail -n 40 "$out" 2>/dev/null; echo '--- lumen.log ---'; tail -n 40 "$log" 2>/dev/null || echo "(none)"; echo '--- tasklist ---'; tasklist 2>/dev/null | grep -i lumen) | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')"
             echo "::error title=Lumen.exe did not finish --self-check::$body"
             exit 1
           fi
