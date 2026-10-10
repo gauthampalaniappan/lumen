@@ -133,7 +133,7 @@ packaging/             release builds: Linux .rpm/.deb, Windows installer, macOS
 
 ## Releasing
 
-Bump `__version__` in `lumen/__init__.py`, add a `<release>` line to `share/org.lumen.Lumen.metainfo.xml`, then push a tag such as `v0.2.0`. GitHub Actions builds and launch-tests every package and puts them in a draft release for you to publish. Details are in [packaging/README.md](packaging/README.md).
+Bump `__version__` in `lumen/__init__.py`, add a `<release>` line to `share/org.lumen.Lumen.metainfo.xml`, push to `main`, then run **Actions → Release → Run workflow** with **Create draft release** ticked (or push a tag such as `v0.2.0`). GitHub Actions builds and launch-tests every package and puts them in a draft release for you to publish. Details are in [packaging/README.md](packaging/README.md).
 
 ## Development checks
 

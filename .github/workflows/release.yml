@@ -1,11 +1,13 @@
 # Builds Lumen for Linux, Windows and macOS.
 #
-# - Push a tag like v0.1.0 -> every package is built, launch-tested, and
-#   attached to a *draft* GitHub Release. Review it, then press Publish.
-# - Run it by hand (Actions tab -> Release -> Run workflow) to test the builds
-#   without making a release; the packages appear as downloadable artifacts.
+# Two ways to make a release (both end in a *draft* you review, then Publish):
+# - Actions tab -> Release -> Run workflow, tick "Create draft release".
+#   The tag (v<version>) is created by GitHub when you press Publish.
+# - Or push a tag like v1.2.3 yourself.
+# Running it without the tick only builds and launch-tests the packages;
+# they appear as downloadable artifacts on that run.
 #
-# The tag must match __version__ in lumen/__init__.py, and
+# The version comes from __version__ in lumen/__init__.py, and
 # share/org.lumen.Lumen.metainfo.xml needs a <release> line for that version.
 name: Release
 
@@ -13,6 +15,11 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      release:
+        description: "Create draft release"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -27,22 +34,52 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
+      tag: ${{ steps.v.outputs.tag }}
+      release: ${{ steps.v.outputs.release }}
+      skip: ${{ steps.v.outputs.skip }}
     steps:
       - uses: actions/checkout@v7
 
-      - name: Read version
+      - name: Read version and decide what to do
         id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAKE_RELEASE: ${{ inputs.release }}
         run: |
           version="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' lumen/__init__.py)"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          if [[ "$GITHUB_REF_TYPE" == "tag" && "${GITHUB_REF_NAME#v}" != "$version" ]]; then
-            echo "::error::Tag $GITHUB_REF_NAME does not match __version__ $version in lumen/__init__.py"
-            exit 1
-          fi
+          tag="v$version"
           if ! grep -q "<release version=\"$version\"" share/org.lumen.Lumen.metainfo.xml; then
             echo "::error::Add <release version=\"$version\" date=\"YYYY-MM-DD\"/> to share/org.lumen.Lumen.metainfo.xml"
             exit 1
           fi
+          release=false
+          skip=false
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            if [[ "$GITHUB_REF_NAME" != "$tag" ]]; then
+              echo "::error::Tag $GITHUB_REF_NAME does not match __version__ $version in lumen/__init__.py"
+              exit 1
+            fi
+            if gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              # Publishing a draft creates the tag, which lands here; already done.
+              echo "::notice::Release $tag already exists; nothing to build."
+              skip=true
+            else
+              release=true
+            fi
+          elif [[ "$MAKE_RELEASE" == "true" ]]; then
+            if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
+              echo "::error::$tag is already released. Bump __version__ in lumen/__init__.py (and add a <release> line to share/org.lumen.Lumen.metainfo.xml) first."
+              exit 1
+            fi
+            release=true
+          fi
+          {
+            echo "version=$version"
+            echo "tag=$tag"
+            echo "release=$release"
+            echo "skip=$skip"
+          } >> "$GITHUB_OUTPUT"
+          echo "Version $version, release=$release, skip=$skip"
 
       - uses: actions/setup-python@v7
         with:
@@ -64,6 +101,7 @@ jobs:
   fedora:
     name: Linux (Fedora .rpm)
     needs: version
+    if: needs.version.outputs.skip != 'true'
     runs-on: ubuntu-latest
     container: fedora:latest
     steps:
@@ -101,6 +139,7 @@ jobs:
   debian:
     name: Linux (Debian/Ubuntu .deb)
     needs: version
+    if: needs.version.outputs.skip != 'true'
     runs-on: ubuntu-latest
     # Debian 13 ships libadwaita 1.7, the oldest version Lumen supports.
     container: debian:13
@@ -139,6 +178,7 @@ jobs:
   windows:
     name: Windows (installer + portable zip)
     needs: version
+    if: needs.version.outputs.skip != 'true'
     runs-on: windows-latest
     env:
       VERSION: ${{ needs.version.outputs.version }}
@@ -208,6 +248,7 @@ jobs:
   macos:
     name: macOS (${{ matrix.arch }} .dmg)
     needs: version
+    if: needs.version.outputs.skip != 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -277,7 +318,7 @@ jobs:
 
   release:
     name: Draft GitHub Release
-    if: github.ref_type == 'tag'
+    if: needs.version.outputs.release == 'true'
     needs: [version, fedora, debian, windows, macos]
     runs-on: ubuntu-latest
     permissions:
@@ -298,7 +339,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.version.outputs.version }}
+          TAG: ${{ needs.version.outputs.tag }}
         run: |
+          # Re-running replaces an earlier unpublished draft for this version.
+          if [ "$(gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null)" = "true" ]; then
+            gh release delete "$TAG" -R "$GITHUB_REPOSITORY" --yes
+          fi
           cat > notes.md <<EOF
           ## Install
 
@@ -318,9 +364,10 @@ jobs:
           On Windows and macOS, importing straight from a camera is not available
           (it needs gphoto2); import from a memory card works by choosing its folder.
           EOF
-          gh release create "$GITHUB_REF_NAME" release/* \
+          gh release create "$TAG" release/* \
             --repo "$GITHUB_REPOSITORY" \
             --draft \
+            --target "$GITHUB_SHA" \
             --title "Lumen $VERSION" \
             --notes-file notes.md \
             --generate-notes

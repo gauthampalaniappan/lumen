@@ -17,19 +17,17 @@ uploaded, so a build that cannot start never reaches a release.
 1. Bump `__version__` in `lumen/__init__.py`.
 2. Add a line for the new version to `share/org.lumen.Lumen.metainfo.xml`, e.g.
    `<release version="0.2.0" date="2026-11-01"/>` (newest first).
-3. Commit, then tag and push:
+3. Commit and push to `main`.
+4. On GitHub, open **Actions → Release → Run workflow**, tick
+   **Create draft release**, and run it. (Pushing a tag such as `v0.2.0`
+   does the same.)
+5. When it finishes, open **Releases**. A draft release holds every installer
+   plus `SHA256SUMS.txt`. Check it, then press **Publish**; GitHub creates the
+   `v0.2.0` tag at that moment.
 
-   ```bash
-   git tag v0.2.0
-   git push origin main v0.2.0
-   ```
-
-4. When the workflow finishes, open **Releases** on GitHub. A draft release
-   holds every installer plus `SHA256SUMS.txt`. Check it, then press **Publish**.
-
-To try the builds without releasing, run the workflow by hand
-(**Actions → Release → Run workflow**). The packages appear as artifacts on
-that run.
+Running the workflow without the tick only builds and launch-tests the
+packages; they appear as artifacts on that run. Running it again with the tick
+before publishing replaces the earlier draft.
 
 ## Building locally
 
